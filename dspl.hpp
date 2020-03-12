@@ -486,6 +486,7 @@ void distCleanCWandCU(const GraphElem nv, std::vector<GraphWeight> &clusterWeigh
 } // distCleanCWandCU
 
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
 void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
         const size_t &ssz, const size_t &rsz, const std::vector<GraphElem> &ssizes, 
         const std::vector<GraphElem> &rsizes, const std::vector<GraphElem> &svdata, 
@@ -493,6 +494,15 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
         const std::vector<Comm> &localCinfo, std::map<GraphElem,Comm> &remoteCinfo, 
         std::unordered_map<GraphElem, GraphElem> &remoteComm, std::map<GraphElem,Comm> &remoteCupdate, 
         const MPI_Win &commwin, const std::vector<MPI_Aint> &disp)
+#else
+void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
+        const size_t &ssz, const size_t &rsz, const std::vector<GraphElem> &ssizes, 
+        const std::vector<GraphElem> &rsizes, const std::vector<GraphElem> &svdata, 
+        const std::vector<GraphElem> &rvdata, const std::vector<GraphElem> &currComm, 
+        const std::vector<Comm> &localCinfo, std::map<GraphElem,Comm> &remoteCinfo, 
+        std::unordered_map<GraphElem, GraphElem> &remoteComm, std::map<GraphElem,Comm> &remoteCupdate, 
+        const std::vector<MPI_Win> &commwins, const std::vector<MPI_Aint> &disp)
+#endif
 #else
 void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
         const size_t &ssz, const size_t &rsz, const std::vector<GraphElem> &ssizes, 
@@ -525,6 +535,7 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
 
 #if defined(USE_MPI_RMA) && !defined(USE_MPI_ACCUMULATE)
   int num_comm_procs;
+  int num_threads;
 #endif
 
 #if defined(USE_MPI_RMA) && !defined(USE_MPI_ACCUMULATE)
@@ -549,6 +560,8 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
       spos += ssizes[i];
       rpos += rsizes[i];
   }
+
+  num_threads = omp_get_max_threads();
 #endif
 
   const GraphElem base = dg.get_base(me), bound = dg.get_bound(me);
@@ -606,10 +619,15 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
       rpos += rsizes[i];
   }
 #else
-  for (int i = 0; i < num_comm_procs; i++) {
-      int target_rank = comm_proc[i];
-      MPI_Put(scdata.data() + comm_proc_buf_disp[i], ssizes[target_rank], MPI_GRAPH_TYPE,
-              target_rank, disp[target_rank], ssizes[target_rank], MPI_GRAPH_TYPE, commwin);
+#pragma omp parallel 
+  {
+      int tid = omp_get_thread_num();
+#pragma omp for schedule(static, 1)
+      for (int i = 0; i < num_comm_procs; i++) {
+          int target_rank = comm_proc[i];
+          MPI_Put(scdata.data() + comm_proc_buf_disp[i], ssizes[target_rank], MPI_GRAPH_TYPE,
+              target_rank, disp[target_rank], ssizes[target_rank], MPI_GRAPH_TYPE, commwins[tid]);
+      }
   }
 #endif
 #elif defined(USE_MPI_SENDRECV)
@@ -659,12 +677,25 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
 
   // fetch baseptr from MPI window
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
   MPI_Win_flush_all(commwin);
+#else
+#pragma omp parallel
+  {
+      int tid = omp_get_thread_num();
+      MPI_Win_flush_all(commwins[tid]);
+  }
+#endif
   MPI_Barrier(gcomm);
 
   GraphElem *rcbuf = nullptr;
   int flag = 0;
+#if defined(USE_MPI_ACCUMULATE)
   MPI_Win_get_attr(commwin, MPI_WIN_BASE, &rcbuf, &flag);
+#else
+  /* All windows point to the same memory; using the zeroth window */
+  MPI_Win_get_attr(commwins[0], MPI_WIN_BASE, &rcbuf, &flag);
+#endif
 #endif
 
   remoteComm.clear();
@@ -1104,10 +1135,17 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
 
 // initial setup before Louvain iteration begins
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
 void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
         std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
         std::vector<GraphElem> &svdata, std::vector<GraphElem> &rvdata,
         const int me, const int nprocs, MPI_Win &commwin)
+#else
+void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
+        std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
+        std::vector<GraphElem> &svdata, std::vector<GraphElem> &rvdata,
+        const int me, const int nprocs, std::vector<MPI_Win> &commwins)
+#endif
 #else
 void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
         std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
@@ -1260,22 +1298,38 @@ void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
 #if defined(USE_MPI_RMA)  
   GraphElem *ptr = nullptr;
   MPI_Info info = MPI_INFO_NULL;
-#if defined(USE_MPI_ACCUMULATE)
   MPI_Info_create(&info);
+#if defined(USE_MPI_ACCUMULATE)
   MPI_Info_set(info, "accumulate_ordering", "none");
   MPI_Info_set(info, "accumulate_ops", "same_op");
-#endif
   MPI_Win_allocate(rsz*sizeof(GraphElem), sizeof(GraphElem), 
           info, gcomm, &ptr, &commwin);
   MPI_Win_lock_all(MPI_MODE_NOCHECK, commwin);
+#else
+  MPI_Info_set(info, "mpi_assert_new_vci", "true");
+  ptr = new GraphElem[rsz];
+  int max_threads = omp_get_max_threads();
+  for (int i = 0; i < max_threads; i++) {
+      MPI_Win_create(ptr, rsz*sizeof(GraphElem), sizeof(GraphElem),
+              info, gcomm, &commwins[i]);
+      MPI_Win_lock_all(MPI_MODE_NOCHECK, commwins[i]);
+  }
+#endif
 #endif
 } // exchangeVertexReqs
 
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
 GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
         size_t &ssz, size_t &rsz, std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
         std::vector<GraphElem> &svdata, std::vector<GraphElem> &rvdata, const GraphWeight lower, 
         const GraphWeight thresh, int &iters, MPI_Win &commwin)
+#else
+GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
+        size_t &ssz, size_t &rsz, std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
+        std::vector<GraphElem> &svdata, std::vector<GraphElem> &rvdata, const GraphWeight lower, 
+        const GraphWeight thresh, int &iters, std::vector<MPI_Win> &commwins)
+#endif
 #else
 GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
         size_t &ssz, size_t &rsz, std::vector<GraphElem> &ssizes, std::vector<GraphElem> &rsizes, 
@@ -1317,9 +1371,13 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
 
   // setup vertices and communities
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
   exchangeVertexReqs(dg, ssz, rsz, ssizes, rsizes, 
           svdata, rvdata, me, nprocs, commwin);
-  
+#else
+  exchangeVertexReqs(dg, ssz, rsz, ssizes, rsizes, 
+          svdata, rvdata, me, nprocs, commwins);
+#endif
   // store the remote displacements 
   std::vector<MPI_Aint> disp(nprocs);
   MPI_Exscan(ssizes.data(), (GraphElem*)disp.data(), nprocs, MPI_GRAPH_TYPE, 
@@ -1348,10 +1406,17 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
 #endif
 
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
     fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
             rsizes, svdata, rvdata, currComm, localCinfo, 
             remoteCinfo, remoteComm, remoteCupdate, 
             commwin, disp);
+#else
+    fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
+            rsizes, svdata, rvdata, currComm, localCinfo, 
+            remoteCinfo, remoteComm, remoteCupdate, 
+            commwins, disp);
+#endif
 #else
     fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
             rsizes, svdata, rvdata, currComm, localCinfo, 
@@ -1423,9 +1488,17 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
   } // end of Louvain iteration
 
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
   MPI_Win_unlock_all(commwin);
   MPI_Win_free(&commwin);
-#endif  
+#else
+  int num_threads = omp_get_max_threads();
+  for (int i = 0; i < num_threads; i++) {
+    MPI_Win_unlock_all(commwins[i]);
+    MPI_Win_free(&commwins[i]);
+  }
+#endif
+#endif
 
   iters = numIters;
 

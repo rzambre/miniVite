@@ -78,11 +78,20 @@ int main(int argc, char *argv[])
 
   if (max_threads > 1) {
       int provided;
+#if defined(USE_MPI_RMA) && !defined(USE_MPI_ACCUMULATE)
+      /* Using Puts */
+      MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+      if (provided < MPI_THREAD_MULTIPLE) {
+          std::cerr << "MPI library does not support MPI_THREAD_MULTIPLE." << std::endl;
+          MPI_Abort(MPI_COMM_WORLD, -99);
+      }
+#else
       MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
       if (provided < MPI_THREAD_FUNNELED) {
           std::cerr << "MPI library does not support MPI_THREAD_FUNNELED." << std::endl;
           MPI_Abort(MPI_COMM_WORLD, -99);
       }
+#endif
   } else {
       MPI_Init(&argc, &argv);
   }
@@ -144,7 +153,11 @@ int main(int argc, char *argv[])
 
   std::vector<GraphElem> ssizes, rsizes, svdata, rvdata;
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
   MPI_Win commwin;
+#else
+  std::vector<MPI_Win> commwins(max_threads);
+#endif
 #endif
   size_t ssz = 0, rsz = 0;
   int iters = 0;
@@ -154,8 +167,13 @@ int main(int argc, char *argv[])
   t1 = MPI_Wtime();
 
 #if defined(USE_MPI_RMA)
+#if defined(USE_MPI_ACCUMULATE)
   currMod = distLouvainMethod(me, nprocs, *g, ssz, rsz, ssizes, rsizes, 
                 svdata, rvdata, currMod, threshold, iters, commwin);
+#else
+  currMod = distLouvainMethod(me, nprocs, *g, ssz, rsz, ssizes, rsizes, 
+                svdata, rvdata, currMod, threshold, iters, commwins);
+#endif
 #else
   currMod = distLouvainMethod(me, nprocs, *g, ssz, rsz, ssizes, rsizes, 
                 svdata, rvdata, currMod, threshold, iters);

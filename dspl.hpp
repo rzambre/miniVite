@@ -79,6 +79,22 @@ const int CommunityDataTag  = 5;
 
 static MPI_Datatype commType;
 
+double t_dist_init;
+double t_exchange_vertex;
+double t_exchange_vertex__comm;
+double t_fill_remote_comm;
+double t_fill_remote_comm__comm;
+double t_fill_remote_comm__comp;
+double t_fill_remote_comm__coll;
+double t_louvain_iter;
+double t_louvain_iter__comp;
+double t_update_remote_comm;
+double t_update_remote_comm__comm;
+double t_update_remote_comm__comp;
+double t_update_remote_comm__coll;
+double t_compute_modularity;
+double t_update_state;
+
 void distSumVertexDegree(const Graph &g, std::vector<GraphWeight> &vDegree, std::vector<Comm> &localCinfo)
 {
   const GraphElem nv = g.get_lnv();
@@ -523,6 +539,10 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
   double t0, t1, ta = 0.0;
 #endif
 
+  double t_start;
+
+  t_start = MPI_Wtime();
+
   const GraphElem base = dg.get_base(me), bound = dg.get_bound(me);
   const GraphElem nv = dg.get_lnv();
   MPI_Comm gcomm = dg.get_comm();
@@ -544,12 +564,14 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
 
   std::vector<GraphElem> rcsizes(nprocs), scsizes(nprocs);
   std::vector<CommInfo> sinfo, rinfo;
+  t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   t0 = MPI_Wtime();
 #endif
   spos = 0;
   rpos = 0;
+  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   std::vector<int> scnts(nprocs), rcnts(nprocs), sdispls(nprocs), rdispls(nprocs);
   for (int i = 0; i < nprocs; i++) {
@@ -612,11 +634,13 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
   MPI_Waitall(nprocs, sreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(nprocs, rreqs.data(), MPI_STATUSES_IGNORE);
 #endif
+  t_fill_remote_comm__comm += (MPI_Wtime() - t_start);
 #ifdef DEBUG_PRINTF  
   t1 = MPI_Wtime();
   ta += (t1 - t0);
 #endif
 
+  t_start = MPI_Wtime();
   // reserve vectors
 #if defined(REPLACE_STL_UOSET_WITH_VECTOR)
   for (GraphElem i = 0; i < nprocs; i++) {
@@ -682,10 +706,14 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
     scsizes[i] = rcinfo[i].size();
     stcsz += scsizes[i];
   }
+  t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 
+  t_start = MPI_Wtime();
   MPI_Alltoall(scsizes.data(), 1, MPI_GRAPH_TYPE, rcsizes.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
+  t_fill_remote_comm__coll += (MPI_Wtime() - t_start);
 
+  t_start = MPI_Wtime();
 #ifdef DEBUG_PRINTF  
   t1 = MPI_Wtime();
   ta += (t1 - t0);
@@ -701,6 +729,8 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
   for (int i = 0; i < nprocs; i++) {
     rtcsz += rcsizes[i];
   }
+
+  t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   std::cout << "[" << me << "]Total communities to receive: " << rtcsz << std::endl;
@@ -722,6 +752,7 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
 #endif
   spos = 0;
   rpos = 0;
+  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   for (int i = 0; i < nprocs; i++) {
       if (i != me) {
@@ -896,7 +927,9 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
 #endif
 
 #endif
+  t_fill_remote_comm__comm += (MPI_Wtime() - t_start);
 
+  t_start = MPI_Wtime();
 #ifdef DEBUG_PRINTF  
   t1 = MPI_Wtime();
   ta += (t1 - t0);
@@ -916,6 +949,7 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
       remoteCinfo.insert(std::map<GraphElem,Comm>::value_type(ccomm, comm));
       remoteCupdate.insert(std::map<GraphElem,Comm>::value_type(ccomm, Comm()));
   }
+  t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 } // end fillRemoteCommunities
 
 void createCommunityMPIType()
@@ -949,7 +983,9 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   const GraphElem base = dg.get_base(me), bound = dg.get_bound(me);
   std::vector<std::vector<CommInfo>> remoteArray(nprocs);
   MPI_Comm gcomm = dg.get_comm();
-  
+  double t_start;
+
+  t_start = MPI_Wtime();
   // FIXME TODO can we use TBB::concurrent_vector instead,
   // to make this parallel; first we have to get rid of maps
   for (std::map<GraphElem,Comm>::const_iterator iter = remoteCupdate.begin(); iter != remoteCupdate.end(); iter++) {
@@ -985,14 +1021,19 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   for (int i = 0; i < nprocs; i++) {
     send_sz[i] = remoteArray[i].size();
   }
+  t_update_remote_comm__comp += (MPI_Wtime() - t_start);
 
+  t_start = MPI_Wtime();
   MPI_Alltoall(send_sz.data(), 1, MPI_GRAPH_TYPE, recv_sz.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
+  t_update_remote_comm__coll += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   const double t1 = MPI_Wtime();
   tc += (t1 - t0);
 #endif
+
+  t_start = MPI_Wtime();
 
   GraphElem rcnt = 0, scnt = 0;
 #ifdef OMP_SCHEDULE_RUNTIME
@@ -1009,6 +1050,7 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
 #ifdef DEBUG_PRINTF  
   std::cout << "[" << me << "]Total number of remote communities to update: " << scnt << std::endl;
 #endif
+  t_update_remote_comm__comp += (MPI_Wtime() - t_start);
 
   GraphElem currPos = 0;
   std::vector<CommInfo> rdata(rcnt);
@@ -1016,6 +1058,7 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
 #ifdef DEBUG_PRINTF  
   const double t2 = MPI_Wtime();
 #endif
+  t_start = MPI_Wtime();
 #if defined(USE_MPI_SENDRECV)
   for (int i = 0; i < nprocs; i++) {
       if (i != me)
@@ -1048,11 +1091,13 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   MPI_Waitall(nprocs, sreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(nprocs, rreqs.data(), MPI_STATUSES_IGNORE);
 #endif
+  t_update_remote_comm__comm += (MPI_Wtime() - t_start);
 #ifdef DEBUG_PRINTF  
   const double t3 = MPI_Wtime();
   std::cout << "[" << me << "]Update remote community MPI time: " << (t3 - t2) << std::endl;
 #endif
 
+  t_start = MPI_Wtime();
 #ifdef OMP_SCHEDULE_RUNTIME
 #pragma omp parallel for shared(rdata, localCinfo) schedule(runtime)
 #else
@@ -1067,6 +1112,7 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
     localCinfo[curr.community-base].size += curr.size;
     localCinfo[curr.community-base].degree += curr.degree;
   }
+  t_update_remote_comm__comp += (MPI_Wtime() - t_start);
 } // updateRemoteCommunities
 
 // initial setup before Louvain iteration begins
@@ -1085,6 +1131,7 @@ void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
   const GraphElem base = dg.get_base(me), bound = dg.get_bound(me);
   const GraphElem nv = dg.get_lnv();
   MPI_Comm gcomm = dg.get_comm();
+  double t_start;
 
 #ifdef USE_OPENMP_LOCK
   std::vector<omp_lock_t> locks(nprocs);
@@ -1169,6 +1216,7 @@ void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
   GraphElem cpos = 0, rpos = 0;
   pproc = 0;
 
+  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   std::vector<int> scnts(nprocs), rcnts(nprocs), sdispls(nprocs), rdispls(nprocs);
   
@@ -1218,6 +1266,7 @@ void exchangeVertexReqs(const Graph &dg, size_t &ssz, size_t &rsz,
   MPI_Waitall(nprocs, sreqs.data(), MPI_STATUSES_IGNORE);
   MPI_Waitall(nprocs, rreqs.data(), MPI_STATUSES_IGNORE);
 #endif
+  t_exchange_vertex__comm += (MPI_Wtime() - t_start);
 
   std::swap(svdata, rvdata);
   std::swap(ssizes, rsizes);
@@ -1250,6 +1299,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
         const GraphWeight thresh, int &iters)
 #endif
 {
+  double t_start;
   std::vector<GraphElem> pastComm, currComm, targetComm;
   std::vector<GraphWeight> vDegree;
   std::vector<GraphWeight> clusterWeight;
@@ -1266,8 +1316,10 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
   GraphWeight currMod = -1.0;
   int numIters = 0;
   
+  t_start = MPI_Wtime();
   distInitLouvain(dg, pastComm, currComm, vDegree, clusterWeight, localCinfo, 
           localCupdate, constantForSecondTerm, me);
+  t_dist_init += (MPI_Wtime() - t_start);
   targetComm.resize(nv);
 
 #ifdef DEBUG_PRINTF  
@@ -1283,6 +1335,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
 #endif
 
   // setup vertices and communities
+  t_start = MPI_Wtime();
 #if defined(USE_MPI_RMA)
   exchangeVertexReqs(dg, ssz, rsz, ssizes, rsizes, 
           svdata, rvdata, me, nprocs, commwin);
@@ -1295,12 +1348,13 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
   exchangeVertexReqs(dg, ssz, rsz, ssizes, rsizes, 
           svdata, rvdata, me, nprocs);
 #endif
+  t_exchange_vertex += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   t1 = MPI_Wtime();
   std::cout << "[" << me << "]Initial communication setup time before Louvain iteration (in s): " << (t1 - t0) << std::endl;
-#endif
- 
+#endif 
+
   // start Louvain iteration
   while(true) {
 #ifdef DEBUG_PRINTF  
@@ -1314,6 +1368,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
     t0 = MPI_Wtime();
 #endif
 
+    t_start = MPI_Wtime();
 #if defined(USE_MPI_RMA)
     fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
             rsizes, svdata, rvdata, currComm, localCinfo, 
@@ -1324,6 +1379,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
             rsizes, svdata, rvdata, currComm, localCinfo, 
             remoteCinfo, remoteComm, remoteCupdate);
 #endif
+    t_fill_remote_comm += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
@@ -1335,6 +1391,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
     t0 = MPI_Wtime();
 #endif
 
+    t_start = MPI_Wtime();
 #pragma omp parallel default(shared), shared(clusterWeight, localCupdate, currComm, targetComm, \
         vDegree, localCinfo, remoteCinfo, remoteComm, pastComm, dg, remoteCupdate), \
         firstprivate(constantForSecondTerm, me)
@@ -1352,22 +1409,29 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
                     constantForSecondTerm, clusterWeight, me);
         }
     }
+    t_louvain_iter__comp += (MPI_Wtime() - t_start);
 
 #pragma omp parallel default(none), shared(localCinfo, localCupdate)
     {
         distUpdateLocalCinfo(localCinfo, localCupdate);
     }
+    t_louvain_iter += (MPI_Wtime() - t_start);
 
+    t_start = MPI_Wtime();
     // communicate remote communities
     updateRemoteCommunities(dg, localCinfo, remoteCupdate, me, nprocs);
+    t_update_remote_comm += (MPI_Wtime() - t_start);
 
+    t_start = MPI_Wtime();
     // compute modularity
     currMod = distComputeModularity(dg, localCinfo, clusterWeight, constantForSecondTerm, me);
+    t_compute_modularity += (MPI_Wtime() - t_start);
 
     // exit criteria
     if (currMod - prevMod < thresh)
         break;
 
+    t_start = MPI_Wtime();
     prevMod = currMod;
     if (prevMod < lower)
         prevMod = lower;
@@ -1387,6 +1451,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
         currComm[i] = targetComm[i];
         targetComm[i] = tmp;
     }
+    t_update_state += (MPI_Wtime() - t_start);
   } // end of Louvain iteration
 
 #if defined(USE_MPI_RMA)

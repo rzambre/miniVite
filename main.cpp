@@ -149,6 +149,24 @@ int main(int argc, char *argv[])
   size_t ssz = 0, rsz = 0;
   int iters = 0;
     
+  t_dist_init = 0;
+  t_exchange_vertex = 0;
+  t_exchange_vertex__comm = 0;
+  t_exchange_vertex__comp = 0;
+  t_exchange_vertex__coll = 0;
+  t_fill_remote_comm = 0;
+  t_fill_remote_comm__comm = 0;
+  t_fill_remote_comm__comp = 0;
+  t_fill_remote_comm__cons = 0;
+  t_louvain_iter = 0;
+  t_louvain_iter__comp = 0;
+  t_update_remote_comm = 0;
+  t_update_remote_comm__comm = 0;
+  t_update_remote_comm__comp = 0;
+  t_update_remote_comm__cons = 0;
+  t_compute_modularity = 0;
+  t_update_state = 0;
+  
   MPI_Barrier(MPI_COMM_WORLD);
 
   t1 = MPI_Wtime();
@@ -162,12 +180,60 @@ int main(int argc, char *argv[])
 #endif
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
+
+  double tot_dist_init = 0;
+  double tot_exchange_vertex = 0;
+  double tot_exchange_vertex__comm = 0;
+  double tot_exchange_vertex__comp = 0;
+  double tot_exchange_vertex__coll = 0;
+  double tot_fill_remote_comm = 0;
+  double tot_fill_remote_comm__comm = 0;
+  double tot_fill_remote_comm__comp = 0;
+  double tot_fill_remote_comm__cons = 0;
+  double tot_louvain_iter = 0;
+  double tot_louvain_iter__comp = 0;
+  double tot_update_remote_comm = 0;
+  double tot_update_remote_comm__comm = 0;
+  double tot_update_remote_comm__comp = 0;
+  double tot_update_remote_comm__cons = 0;
+  double tot_compute_modularity = 0;
+  double tot_update_state = 0;
+
+  MPI_Reduce(&t_dist_init, &tot_dist_init, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_exchange_vertex, &tot_exchange_vertex, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_exchange_vertex__comm, &tot_exchange_vertex__comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_exchange_vertex__comp, &tot_exchange_vertex__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_exchange_vertex__coll, &tot_exchange_vertex__coll, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm, &tot_fill_remote_comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm__comm, &tot_fill_remote_comm__comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm__comp, &tot_fill_remote_comm__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm__cons, &tot_fill_remote_comm__cons, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_louvain_iter, &tot_louvain_iter, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_louvain_iter__comp, &tot_louvain_iter__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm, &tot_update_remote_comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm__comm, &tot_update_remote_comm__comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm__comp, &tot_update_remote_comm__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm__cons, &tot_update_remote_comm__cons, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_compute_modularity, &tot_compute_modularity, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_state, &tot_update_state, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   
   if(me == 0) {
       std::cout << "Modularity: " << currMod << ", Iterations: " 
           << iters << ", Time (in s): "<<t0-t1<< std::endl;
 
       std::cout << "**********************************************************************" << std::endl;
+      
+      printf("%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n","Dist_init",
+              "Exchange_vertex","Exchange_vertex__comm","Exchange_vertex__comp","Exchange_vertex__coll","Iters","Total","Fill_remote","Fill_remote__comm","Fill_remote__comp","Fill_remote__cons",
+              "Louvain_iter","Louvain_iter__comp","Update_remote","Update_remote__comm","Update_remote__comp","Update_remote__cons","Mod_comp","State_update");
+      printf("%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
+              tot_dist_init/nprocs,
+              tot_exchange_vertex/nprocs,tot_exchange_vertex__comm/nprocs,tot_exchange_vertex__comp/nprocs,tot_exchange_vertex__coll/nprocs,
+              iters, t0-t1, tot_fill_remote_comm/nprocs, tot_fill_remote_comm__comm/nprocs,tot_fill_remote_comm__comp/nprocs,tot_fill_remote_comm__cons/nprocs,
+              tot_louvain_iter/nprocs,tot_louvain_iter__comp/nprocs,
+              tot_update_remote_comm/nprocs,tot_update_remote_comm__comm/nprocs,tot_update_remote_comm__comp/nprocs,tot_update_remote_comm__cons/nprocs,
+              tot_compute_modularity/nprocs,
+              tot_update_state/nprocs);
   }
 
   MPI_Barrier(MPI_COMM_WORLD);

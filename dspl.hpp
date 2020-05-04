@@ -87,13 +87,17 @@ double t_exchange_vertex__coll;
 double t_fill_remote_comm;
 double t_fill_remote_comm__comm;
 double t_fill_remote_comm__comp;
-double t_fill_remote_comm__cons;
+//double t_fill_remote_comm__cons;
+double t_fill_remote_comm__cons_nb;
+double t_fill_remote_comm__cons_barr;
 double t_louvain_iter;
 double t_louvain_iter__comp;
 double t_update_remote_comm;
 double t_update_remote_comm__comm;
 double t_update_remote_comm__comp;
-double t_update_remote_comm__cons;
+//double t_update_remote_comm__cons;
+double t_update_remote_comm__cons_nb;
+double t_update_remote_comm__cons_barr;
 double t_compute_modularity;
 double t_update_state;
 
@@ -710,15 +714,17 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
   }
   t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 
-  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   MPI_Alltoall(scsizes.data(), 1, MPI_GRAPH_TYPE, rcsizes.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
 #else
+  t_start = MPI_Wtime();
   NbConsensus(scsizes.data(), rcsizes.data(), nprocs, gcomm);
+  t_fill_remote_comm__cons_nb += (MPI_Wtime() - t_start);
+  t_start = MPI_Wtime();
   MPI_Barrier(gcomm);
+  t_fill_remote_comm__cons_barr += (MPI_Wtime() - t_start);
 #endif
-  t_fill_remote_comm__cons += (MPI_Wtime() - t_start);
 
   t_start = MPI_Wtime();
 #ifdef DEBUG_PRINTF  
@@ -1030,15 +1036,17 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   }
   t_update_remote_comm__comp += (MPI_Wtime() - t_start);
 
-  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   MPI_Alltoall(send_sz.data(), 1, MPI_GRAPH_TYPE, recv_sz.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
 #else
+  t_start = MPI_Wtime();
   NbConsensus(send_sz.data(), recv_sz.data(), nprocs, gcomm);
+  t_update_remote_comm__cons_nb += (MPI_Wtime() - t_start);
+  t_start = MPI_Wtime();
   MPI_Barrier(gcomm);
+  t_update_remote_comm__cons_barr += (MPI_Wtime() - t_start);
 #endif
-  t_update_remote_comm__cons += (MPI_Wtime() - t_start);
 
 #ifdef DEBUG_PRINTF  
   const double t1 = MPI_Wtime();

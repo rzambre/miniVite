@@ -238,7 +238,7 @@ int main(int argc, char *argv[])
       printf("%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n","Dist_init",
               "Exchange_vertex","Exchange_vertex__comm","Exchange_vertex__comp","Exchange_vertex__coll","Iters","Total","Fill_remote","Fill_remote__comm","Fill_remote__comp","Fill_remote__cons_nb","Fill_remote__cons_barr",
               "Louvain_iter","Louvain_iter__comp","Update_remote","Update_remote__comm","Update_remote__comp","Update_remote__cons_nb","Update_remote__cons_barr","Mod_comp","State_update");
-      printf("%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
+      printf("%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
               tot_dist_init/nprocs,
               tot_exchange_vertex/nprocs,tot_exchange_vertex__comm/nprocs,tot_exchange_vertex__comp/nprocs,tot_exchange_vertex__coll/nprocs,
               iters, t0-t1, tot_fill_remote_comm/nprocs, tot_fill_remote_comm__comm/nprocs,tot_fill_remote_comm__comp/nprocs,tot_fill_remote_comm__cons_nb/nprocs,tot_fill_remote_comm__cons_barr/nprocs,

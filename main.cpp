@@ -78,8 +78,8 @@ int main(int argc, char *argv[])
 
   if (max_threads > 1) {
       int provided;
-      MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-      if (provided < MPI_THREAD_FUNNELED) {
+      MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+      if (provided < MPI_THREAD_MULTIPLE) {
           std::cerr << "MPI library does not support MPI_THREAD_FUNNELED." << std::endl;
           MPI_Abort(MPI_COMM_WORLD, -99);
       }

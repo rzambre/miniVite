@@ -111,47 +111,93 @@ T genRandom(T lo, T hi)
 }
 
 // see https://dl.acm.org/doi/pdf/10.1145/1837853.1693476
-void NbConsensus(GraphElem* sendCount, GraphElem* recvCount, const int nprocs, MPI_Comm gcomm)
+void NbConsensus(GraphElem* sendCount, GraphElem* recvCount, const int nprocs, const MPI_Comm* thread_comm)
 {
-    bool done = false, ibar_active = false;
-    MPI_Request ibar_req;
-    std::vector<MPI_Request> sendreqs(nprocs, MPI_REQUEST_NULL);
-    int req_count = 0;
-
+    int num_procs_to_send_to = 0;
+    std::vector<int> procs_to_send_to(nprocs);
+    
+    //int rank;
+    //MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    
     for (int i = 0 ; i < nprocs; i++) {
         if (sendCount[i] > 0) {
-            MPI_Issend(&sendCount[i], 1, MPI_GRAPH_TYPE, i, 
-                    100, gcomm, &sendreqs[req_count++]);
+            procs_to_send_to[num_procs_to_send_to] = i;
+            num_procs_to_send_to++;
         }
     }
+    //printf("Rank %d: %d num_procs_to_send_to\n", rank, num_procs_to_send_to);
+    fflush(stdout);
+
+#pragma omp parallel
+    {
+        // Make variables private (probably not needed)
+        int tid = omp_get_thread_num();
+        int my_num_procs_to_send_to = num_procs_to_send_to;
+        int my_nprocs = nprocs;
+        int num_threads = omp_get_max_threads();
+        GraphElem *my_sendCount = sendCount;
+        GraphElem *my_recvCount = recvCount;
+        int *my_procs_to_send_to = procs_to_send_to.data();
+        MPI_Comm my_comm = thread_comm[tid];
         
-    int flag = -1; 
-    MPI_Status stat;
+        /* Each thread will have a maximum of ceil(nprocs/num_threads) requests */
+        int sreqs_per_thread = (my_nprocs % num_threads) ? (my_nprocs / num_threads) + 1 : (my_nprocs / num_threads);
+        std::vector<MPI_Request> sendreqs(sreqs_per_thread, MPI_REQUEST_NULL);
+        
+        int req_count = 0;
 
-    while(!done) {
-        MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, gcomm, &flag, &stat);
-
-        if (flag) {
-            const int src = stat.MPI_SOURCE;
-            MPI_Recv(&recvCount[src], 1, MPI_GRAPH_TYPE, src, 
-                    stat.MPI_TAG, gcomm, MPI_STATUS_IGNORE);
+        /* Round robin distribution between the threads */
+#pragma omp for schedule(static, 1) nowait
+        for (int i = 0 ; i < my_num_procs_to_send_to; i++) {
+            //printf("Rank %d, thread %d: Issending to %d\n", rank, tid, procs_to_send_to[i]);
+            fflush(stdout);
+            MPI_Issend(&my_sendCount[my_procs_to_send_to[i]], 1, MPI_GRAPH_TYPE, my_procs_to_send_to[i], 
+                    100, my_comm, &sendreqs[req_count++]);
         }
+ 
+        int flag = -1;
+        bool done = false;
+        bool ibar_active = false;
+        MPI_Request ibar_req;
+        MPI_Status stat;
 
-        if (ibar_active) {
-            flag = -1;
-            MPI_Test(&ibar_req, &flag, MPI_STATUS_IGNORE);
-            if (flag)
-                done = true;
-        }
-        else {
-            flag = -1;
-            MPI_Testall(req_count, sendreqs.data(), &flag, MPI_STATUSES_IGNORE);
+        while(!done) {
+            //printf("Rank %d, thread %d: Probing\n", rank, tid);
+            MPI_Iprobe(MPI_ANY_SOURCE, MPI_ANY_TAG, my_comm, &flag, &stat);
+
             if (flag) {
-                MPI_Ibarrier(gcomm, &ibar_req);
-                ibar_active = true;
+                const int src = stat.MPI_SOURCE;
+                //printf("Rank %d, thread %d: Successful probe. Receiving from %d\n", rank, tid, src);
+                fflush(stdout);
+                MPI_Recv(&my_recvCount[src], 1, MPI_GRAPH_TYPE, src, 
+                        stat.MPI_TAG, my_comm, MPI_STATUS_IGNORE);
             }
-        }
-    }    
+
+            if (ibar_active) {
+                //printf("Rank %d, thread %d: Testing Ibarrier\n", rank, tid);
+                flag = -1;
+                MPI_Test(&ibar_req, &flag, MPI_STATUS_IGNORE);
+                if (flag) {
+                    //printf("Rank %d, thread %d: Ibarrier finished\n", rank, tid);
+                    fflush(stdout);
+                    done = true;
+                }
+            }
+            else {
+                //printf("Rank %d, thread %d: Testing %d Issends\n", rank, tid, req_count);
+                flag = -1;
+                MPI_Testall(req_count, sendreqs.data(), &flag, MPI_STATUSES_IGNORE);
+                if (flag) {
+                    //printf("Rank %d, thread %d: Completed Issends. Issuing Ibarrier\n", rank, tid);
+                    MPI_Ibarrier(my_comm, &ibar_req);
+                    ibar_active = true;
+                }
+            }
+        } 
+    }
+
+    //printf("Rank %d: Finished consensus!\n", rank);
+
 }
 
 // Parallel Linear Congruential Generator

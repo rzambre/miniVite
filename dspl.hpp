@@ -710,12 +710,15 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
   }
   t_fill_remote_comm__comp += (MPI_Wtime() - t_start);
 
-  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   MPI_Alltoall(scsizes.data(), 1, MPI_GRAPH_TYPE, rcsizes.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
 #else
-  NbConsensus(scsizes.data(), rcsizes.data(), nprocs, gcomm);
+  //if (me == 0) printf("Starting NBX\n");
+  MPI_Barrier(gcomm);
+  t_start = MPI_Wtime();
+  NbConsensus(scsizes.data(), rcsizes.data(), nprocs, dg.thread_comms_.data());
+  //if (me == 0) printf("Done NBX\n");
   MPI_Barrier(gcomm);
 #endif
   t_fill_remote_comm__cons += (MPI_Wtime() - t_start);
@@ -1030,12 +1033,15 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   }
   t_update_remote_comm__comp += (MPI_Wtime() - t_start);
 
-  t_start = MPI_Wtime();
 #if defined(USE_MPI_COLLECTIVES)
   MPI_Alltoall(send_sz.data(), 1, MPI_GRAPH_TYPE, recv_sz.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
 #else
-  NbConsensus(send_sz.data(), recv_sz.data(), nprocs, gcomm);
+  //if (me == 0) printf("Starting NBX\n");
+  MPI_Barrier(gcomm);
+  t_start = MPI_Wtime();
+  NbConsensus(send_sz.data(), recv_sz.data(), nprocs, dg.thread_comms_.data());
+  //if (me == 0) printf("Done NBX\n");
   MPI_Barrier(gcomm);
 #endif
   t_update_remote_comm__cons += (MPI_Wtime() - t_start);
@@ -1388,6 +1394,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
     t0 = MPI_Wtime();
 #endif
 
+    //if (me == 0) printf("%d: Starting fillRemote\n", numIters);
     t_start = MPI_Wtime();
 #if defined(USE_MPI_RMA)
     fillRemoteCommunities(dg, me, nprocs, ssz, rsz, ssizes, 
@@ -1400,6 +1407,7 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
             remoteCinfo, remoteComm, remoteCupdate);
 #endif
     t_fill_remote_comm += (MPI_Wtime() - t_start);
+    //if (me == 0) printf("%d: Done fillRemote\n", numIters);
 
 #ifdef DEBUG_PRINTF  
     t1 = MPI_Wtime();
@@ -1437,10 +1445,12 @@ GraphWeight distLouvainMethod(const int me, const int nprocs, const Graph &dg,
     }
     t_louvain_iter += (MPI_Wtime() - t_start);
 
+    //if (me == 0) printf("%d: Starting updateRemote\n", numIters);
     t_start = MPI_Wtime();
     // communicate remote communities
     updateRemoteCommunities(dg, localCinfo, remoteCupdate, me, nprocs);
     t_update_remote_comm += (MPI_Wtime() - t_start);
+    //if (me == 0) printf("%d: Done updateRemote\n", numIters);
 
     t_start = MPI_Wtime();
     // compute modularity

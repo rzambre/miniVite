@@ -118,6 +118,7 @@ class Graph
             edge_list_.clear();
             edge_indices_.clear();
             parts_.clear();
+            thread_comms_.clear();
         }
          
         // update vertex partition information
@@ -153,6 +154,27 @@ class Graph
             // compute total number of edges
             ne_ = 0;
             MPI_Allreduce(&lne_, &ne_, 1, MPI_GRAPH_TYPE, MPI_SUM, comm_);
+        }
+
+        void create_thread_comms(int num_threads)
+        {
+            MPI_Info info;
+
+            thread_comms_.resize(num_threads);
+            
+            MPI_Info_create(&info);
+            MPI_Info_set(info, "mpi_assert_new_vci", "true");
+
+            for (int i = 0; i < num_threads; i++) {
+                MPI_Comm_dup_with_info(comm_, info, &thread_comms_[i]);
+            }
+        }
+
+        void free_thread_comms(int num_threads)
+        {
+            for (int i = 0; i < num_threads; i++) {
+                MPI_Comm_free(&thread_comms_[i]);
+            }
         }
 
         GraphElem get_base(const int rank) const
@@ -287,6 +309,7 @@ class Graph
         // public variables
         std::vector<GraphElem> edge_indices_;
         std::vector<Edge> edge_list_;
+        std::vector<MPI_Comm> thread_comms_;
     private:
         GraphElem lnv_, lne_, nv_, ne_;
         std::vector<GraphElem> parts_;       

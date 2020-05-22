@@ -148,6 +148,9 @@ int main(int argc, char *argv[])
 #endif
   size_t ssz = 0, rsz = 0;
   int iters = 0;
+
+  /* Create a communicator per thread */
+  g->create_thread_comms(max_threads);
     
   t_dist_init = 0;
   t_exchange_vertex = 0;
@@ -180,6 +183,9 @@ int main(int argc, char *argv[])
 #endif
   MPI_Barrier(MPI_COMM_WORLD);
   t0 = MPI_Wtime();
+  
+  /* Destroy the per-thread communicators */
+  g->free_thread_comms(max_threads);
 
   double tot_dist_init = 0;
   double tot_exchange_vertex = 0;

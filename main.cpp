@@ -158,6 +158,7 @@ int main(int argc, char *argv[])
   t_fill_remote_comm__comm = 0;
   t_fill_remote_comm__comp = 0;
   //t_fill_remote_comm__cons = 0;
+  t_fill_remote_comm__cons_pre_barr = 0;
   t_fill_remote_comm__cons_nb = 0;
   t_fill_remote_comm__cons_barr = 0;
   t_louvain_iter = 0;
@@ -166,6 +167,7 @@ int main(int argc, char *argv[])
   t_update_remote_comm__comm = 0;
   t_update_remote_comm__comp = 0;
   //t_update_remote_comm__cons = 0;
+  t_update_remote_comm__cons_pre_barr = 0;
   t_update_remote_comm__cons_nb = 0;
   t_update_remote_comm__cons_barr = 0;
   t_compute_modularity = 0;
@@ -194,6 +196,7 @@ int main(int argc, char *argv[])
   double tot_fill_remote_comm__comm = 0;
   double tot_fill_remote_comm__comp = 0;
   //double tot_fill_remote_comm__cons = 0;
+  double tot_fill_remote_comm__cons_pre_barr = 0;
   double tot_fill_remote_comm__cons_nb = 0;
   double tot_fill_remote_comm__cons_barr = 0;
   double tot_louvain_iter = 0;
@@ -202,6 +205,7 @@ int main(int argc, char *argv[])
   double tot_update_remote_comm__comm = 0;
   double tot_update_remote_comm__comp = 0;
   //double tot_update_remote_comm__cons = 0;
+  double tot_update_remote_comm__cons_pre_barr = 0;
   double tot_update_remote_comm__cons_nb = 0;
   double tot_update_remote_comm__cons_barr = 0;
   double tot_compute_modularity = 0;
@@ -216,6 +220,7 @@ int main(int argc, char *argv[])
   MPI_Reduce(&t_fill_remote_comm__comm, &tot_fill_remote_comm__comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_fill_remote_comm__comp, &tot_fill_remote_comm__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   //MPI_Reduce(&t_fill_remote_comm__cons, &tot_fill_remote_comm__cons, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_fill_remote_comm__cons_pre_barr, &tot_fill_remote_comm__cons_pre_barr, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_fill_remote_comm__cons_nb, &tot_fill_remote_comm__cons_nb, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_fill_remote_comm__cons_barr, &tot_fill_remote_comm__cons_barr, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_louvain_iter, &tot_louvain_iter, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -224,6 +229,7 @@ int main(int argc, char *argv[])
   MPI_Reduce(&t_update_remote_comm__comm, &tot_update_remote_comm__comm, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_update_remote_comm__comp, &tot_update_remote_comm__comp, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   //MPI_Reduce(&t_update_remote_comm__cons, &tot_update_remote_comm__cons, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&t_update_remote_comm__cons_pre_barr, &tot_update_remote_comm__cons_pre_barr, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_update_remote_comm__cons_nb, &tot_update_remote_comm__cons_nb, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_update_remote_comm__cons_barr, &tot_update_remote_comm__cons_barr, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Reduce(&t_compute_modularity, &tot_compute_modularity, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -235,15 +241,17 @@ int main(int argc, char *argv[])
 
       std::cout << "**********************************************************************" << std::endl;
       
-      printf("%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n","Dist_init",
-              "Exchange_vertex","Exchange_vertex__comm","Exchange_vertex__comp","Exchange_vertex__coll","Iters","Total","Fill_remote","Fill_remote__comm","Fill_remote__comp","Fill_remote__cons_nb","Fill_remote__cons_barr",
-              "Louvain_iter","Louvain_iter__comp","Update_remote","Update_remote__comm","Update_remote__comp","Update_remote__cons_nb","Update_remote__cons_barr","Mod_comp","State_update");
-      printf("%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
+      printf("%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\t%-10s\n","Dist_init",
+              "Exchange_vertex","Exchange_vertex__comm","Exchange_vertex__comp","Exchange_vertex__coll","Iters","Total","Fill_remote","Fill_remote__comm","Fill_remote__comp","Fill_remote__cons_pre_barr","Fill_remote__cons_nb","Fill_remote__cons_barr",
+              "Louvain_iter","Louvain_iter__comp","Update_remote","Update_remote__comm","Update_remote__comp","Update_remote__cons_pre_barr","Update_remote__cons_nb","Update_remote__cons_barr","Mod_comp","State_update");
+      printf("%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10d\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\t%-10.9f\n",
               tot_dist_init/nprocs,
               tot_exchange_vertex/nprocs,tot_exchange_vertex__comm/nprocs,tot_exchange_vertex__comp/nprocs,tot_exchange_vertex__coll/nprocs,
-              iters, t0-t1, tot_fill_remote_comm/nprocs, tot_fill_remote_comm__comm/nprocs,tot_fill_remote_comm__comp/nprocs,tot_fill_remote_comm__cons_nb/nprocs,tot_fill_remote_comm__cons_barr/nprocs,
+              iters, t0-t1, tot_fill_remote_comm/nprocs, tot_fill_remote_comm__comm/nprocs,tot_fill_remote_comm__comp/nprocs,
+              tot_fill_remote_comm__cons_pre_barr/nprocs,tot_fill_remote_comm__cons_nb/nprocs,tot_fill_remote_comm__cons_barr/nprocs,
               tot_louvain_iter/nprocs,tot_louvain_iter__comp/nprocs,
-              tot_update_remote_comm/nprocs,tot_update_remote_comm__comm/nprocs,tot_update_remote_comm__comp/nprocs,tot_update_remote_comm__cons_nb/nprocs,tot_update_remote_comm__cons_barr/nprocs,
+              tot_update_remote_comm/nprocs,tot_update_remote_comm__comm/nprocs,tot_update_remote_comm__comp/nprocs,
+              tot_update_remote_comm__cons_pre_barr/nprocs,tot_update_remote_comm__cons_nb/nprocs,tot_update_remote_comm__cons_barr/nprocs,
               tot_compute_modularity/nprocs,
               tot_update_state/nprocs);
   }

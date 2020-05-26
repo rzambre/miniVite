@@ -88,6 +88,7 @@ double t_fill_remote_comm;
 double t_fill_remote_comm__comm;
 double t_fill_remote_comm__comp;
 //double t_fill_remote_comm__cons;
+double t_fill_remote_comm__cons_pre_barr;
 double t_fill_remote_comm__cons_nb;
 double t_fill_remote_comm__cons_barr;
 double t_louvain_iter;
@@ -96,6 +97,7 @@ double t_update_remote_comm;
 double t_update_remote_comm__comm;
 double t_update_remote_comm__comp;
 //double t_update_remote_comm__cons;
+double t_update_remote_comm__cons_pre_barr;
 double t_update_remote_comm__cons_nb;
 double t_update_remote_comm__cons_barr;
 double t_compute_modularity;
@@ -719,6 +721,9 @@ void fillRemoteCommunities(const Graph &dg, const int me, const int nprocs,
           1, MPI_GRAPH_TYPE, gcomm);
 #else
   t_start = MPI_Wtime();
+  MPI_Barrier(gcomm);
+  t_fill_remote_comm__cons_pre_barr += (MPI_Wtime() - t_start);
+  t_start = MPI_Wtime();
   NbConsensus(scsizes.data(), rcsizes.data(), nprocs, gcomm);
   t_fill_remote_comm__cons_nb += (MPI_Wtime() - t_start);
   t_start = MPI_Wtime();
@@ -1040,6 +1045,9 @@ void updateRemoteCommunities(const Graph &dg, std::vector<Comm> &localCinfo,
   MPI_Alltoall(send_sz.data(), 1, MPI_GRAPH_TYPE, recv_sz.data(), 
           1, MPI_GRAPH_TYPE, gcomm);
 #else
+  t_start = MPI_Wtime();
+  MPI_Barrier(gcomm);
+  t_update_remote_comm__cons_pre_barr += (MPI_Wtime() - t_start);
   t_start = MPI_Wtime();
   NbConsensus(send_sz.data(), recv_sz.data(), nprocs, gcomm);
   t_update_remote_comm__cons_nb += (MPI_Wtime() - t_start);
